@@ -1,0 +1,98 @@
+# Casos escritos a mano. NINGUNO viene de una base de cliente: son textos
+# inventados que ejercitan la lógica del motor. Por eso pueden vivir en el repo
+# y por eso la suite corre en cualquier máquina.
+#
+# esperado: la Categoría que debe salir, o null para "gestionable"
+# hueco_conocido: true  → el caso FALLA a propósito. Documenta una limitación
+#                         aceptada. Si empieza a pasar, hay que quitarle la
+#                         marca, no dejarla puesta.
+
+casos:
+
+  # ── Lo que sí funciona hoy ──────────────────────────────────────────
+  - nombre: acuso de lectura simple
+    texto: "mensaje leido"
+    esperado: "Acuso de lectura"
+
+  - nombre: OOO sin articulo intermedio
+    texto: "Estimado cliente, estoy fuera de oficina hasta el lunes."
+    esperado: "Fuera de oficina / OOO"
+
+  - nombre: OOO en ingles
+    texto: "I am currently out of office and will reply next week."
+    esperado: "Fuera de oficina / OOO"
+
+  - nombre: rebote de entrega
+    texto: "Delivery Status Notification (Failure)"
+    esperado: "Rebote / fallo de entrega"
+
+  - nombre: ok gracias aislado
+    texto: "ok, gracias"
+    esperado: "Confirmación / OKG"
+
+  # ── Lo que NO se puede excluir: falso positivo que rompe una gestión ──
+  - nombre: solicitud real que termina en gracias
+    texto: >
+      Estimada, necesito que anulen el cargo duplicado que me aparece en la
+      tarjeta de crédito del mes pasado, son dos cobros por el mismo monto.
+      Quedo atenta a su respuesta, gracias.
+    esperado: null
+
+  - nombre: reclamo real que menciona vacaciones
+    texto: >
+      Buenas tardes, solicito reprogramar el pago de mi crédito porque estuve
+      con licencia médica y necesito saber el nuevo monto de la cuota.
+    esperado: null
+
+  # ── Limpieza de bloques ─────────────────────────────────────────────
+  - nombre: banner de cabecera no debe borrar el cuerpo
+    contexto: [santander]
+    texto: >
+      ALERTA: Este mensaje proviene de un remitente externo a la organizacion,
+      reenvialo a phishing@ejemplo.cl si te parece sospechoso.
+      Estimado, necesito el certificado de deuda de mi credito hipotecario.
+    esperado: null
+    debe_contener_en_limpio: "certificado de deuda"
+
+  - nombre: pie normativo se corta desde el match
+    contexto: [cl]
+    texto: >
+      Le confirmo que su solicitud quedo registrada con el folio 4471.
+      Informese sobre la garantia estatal de los depositos en su banco o en
+      www.cmfchile.cl
+    esperado: null
+    no_debe_contener_en_limpio: "cmfchile"
+
+  - nombre: banner de otro cliente no se aplica sin contexto
+    texto: >
+      ALERTA: Este mensaje proviene de un remitente externo a la organizacion,
+      reenvialo a phishing@ejemplo.cl si te parece sospechoso.
+      Necesito el certificado.
+    debe_contener_en_limpio: "alerta"
+
+  # ── Huecos conocidos: fallan a propósito ────────────────────────────
+  - nombre: OOO con articulo intermedio
+    texto: "Me encuentro fuera de la oficina, retomare contacto el dia habil siguiente."
+    esperado: "Fuera de oficina / OOO"
+    hueco_conocido: true
+    motivo: >
+      La regla del catálogo dice «fuera de oficina» y el motor exige los
+      términos contiguos. Se resuelve con palabras vacías opcionales entre
+      términos. PENDIENTES hueco 3.
+
+  - nombre: OOO conjugado, catalogo en infinitivo
+    texto: "Estare ausente el 08/06 y 09/06, favor contactar a mi back up."
+    esperado: "Fuera de oficina / OOO"
+    hueco_conocido: true
+    motivo: >
+      La regla dice «estar ausente» (lema) y el motor matchea superficie.
+      Se resuelve con lematización o con terminación flexible en verbos.
+      PENDIENTES hueco 3.
+
+  - nombre: fuera de la sucursal
+    texto: "Me encuentro fuera de la sucursal por el resto de la jornada."
+    esperado: "Fuera de oficina / OOO"
+    hueco_conocido: true
+    motivo: >
+      El catálogo cubre «oficina», no «sucursal». Es una decisión de catálogo,
+      no un bug del motor. No ampliar la regla para hacer pasar este caso.

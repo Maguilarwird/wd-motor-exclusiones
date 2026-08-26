@@ -1,0 +1,34 @@
+# Bloques institucionales que se remueven ANTES de evaluar reglas.
+#
+# Estos patrones vivían escritos a mano dentro de exclusion_engine.py.
+# Acá son datos: se agregan y se editan sin tocar el motor.
+#
+# tipo:
+#   cabecera → se borra donde aparezca, el resto del mensaje se conserva
+#   pie      → se corta desde el match hasta el final del mensaje
+#
+# Los patrones se evalúan sobre texto YA NORMALIZADO: minúsculas, sin
+# acentos, espacios colapsados. Por eso se escriben sin tildes.
+# (En el motor anterior estaban escritos sin tildes pero se aplicaban
+#  sobre el texto crudo, así que los que tenían acento no matcheaban nunca.)
+#
+# alcance: 'todos' o el identificador del cliente / país.
+
+bloques:
+  - id: BAN-0001
+    alcance: santander
+    tipo: cabecera
+    descripcion: Banner de seguridad para correo de remitente externo
+    patron: 'alerta:?\s*este mensaje proviene de un remitente.*?(reenvialo a\s*\S+|boton del pez\S*)\.?'
+
+  - id: BAN-0002
+    alcance: santander
+    tipo: pie
+    descripcion: Bloque "tips para evitar estafas"
+    patron: 'tips para evitar estafas'
+
+  - id: BAN-0003
+    alcance: cl
+    tipo: pie
+    descripcion: Aviso normativo de garantia estatal de depositos (CMF)
+    patron: 'informese sobre la garantia estatal de los depositos'

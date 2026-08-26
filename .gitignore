@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────────────────────────
+# Bases de correos — NUNCA. Traen RUT, correos y nombres reales.
+# Si una entra a un commit, queda en la historia para siempre.
+# ─────────────────────────────────────────────────────────────
+datos/
+*.csv
+!catalogos/*.csv
+*.tsv
+*.xls
+*.pst
+*.eml
+*.msg
+*.sql
+*.dump
+
+# El catálogo vive en CSV (diff legible). Los xlsx no entran.
+*.xlsx
+!catalogos/*.csv
+
+# Salidas del motor (contienen texto de correos)
+salidas/
+resultados/
+output/
+*_EXCLUSIONES.xlsx
+*_procesado.*
+*_marcado.*
+
+# Notebooks: los outputs guardados traen los datos reales adentro
+*.ipynb
+.ipynb_checkpoints/
+
+# Credenciales
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credenciales*
+secrets*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Editores y sistema
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.tmp.*

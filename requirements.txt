@@ -1,0 +1,25 @@
+# Motor de exclusiones — dependencias
+#
+# Versiones fijas a propósito: un cambio de versión del modelo lingüístico
+# puede inventar lemas distintos y romper reglas del catálogo en silencio.
+# Al subir de versión, correr la suite de regresión ANTES de aceptar el cambio.
+
+pyyaml>=6.0
+openpyxl>=3.1
+pandas>=2.0            # solo para los scripts de terminal, no para el servicio
+
+# Servicio HTTP
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.6
+
+# ─────────────────────────────────────────────────────────────
+# spaCy TODAVÍA NO es dependencia: el motor v0 matchea sobre superficie,
+# no sobre lemas. Cuando se implemente el match tolerante (ver PENDIENTES.md,
+# hueco 3) se agrega:
+#
+#     spacy==3.8.15
+#     python -m spacy download es_core_news_sm
+#
+# con el nombre del modelo en la variable de entorno MODELO_SPACY.
+# ─────────────────────────────────────────────────────────────

@@ -1,0 +1,9 @@
+﻿Campo,Valor válido,Nota
+Condición de match,Frase contenida,implementada en el motor
+Condición de match,Solo aislado,implementada en el motor
+Condición de match,Remitente / dominio,implementada en el motor
+Condición de match,Sin petición,NO implementada todavía: auditar_catalogo.py falla si se usa
+Alcance,todos,aplica siempre
+Alcance,cl / mx / ...,solo si el contexto trae ese token
+Alcance,santander / bch / invex / ...,solo para ese cliente
+Alcance,"a,b",varios separados por coma

@@ -1,0 +1,11 @@
+salidas/
+datos/
+*.csv
+!catalogos/*.csv
+*.xlsx
+*.ipynb
+__pycache__/
+*.pyc
+.venv/
+.git/
+scripts/
