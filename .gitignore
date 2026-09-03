@@ -13,6 +13,12 @@ datos/
 *.sql
 *.dump
 
+# Respaldos del catálogo que deja el trabajo de afinamiento. No terminan en
+# .csv, así que la regla de arriba no los agarra.
+*.antes-*
+*_respaldo.*
+*respaldo*.csv
+
 # El catálogo vive en CSV (diff legible). Los xlsx no entran.
 *.xlsx
 !catalogos/*.csv

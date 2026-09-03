@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from .exclusion_engine import ExclusionEngine, load_catalog
+from .exclusion_engine import ExclusionEngine, load_catalog, normalizar_contexto
 
 RAIZ = Path(__file__).resolve().parents[1]
 CASOS_DEFAULT = RAIZ / "tests" / "casos_regresion.yaml"
@@ -42,6 +42,24 @@ def correr_suite(engine=None, ruta_casos=None, ruta_catalogo=None):
         if ("no_debe_contener_en_limpio" in c
                 and c["no_debe_contener_en_limpio"] in r["texto_limpio"]):
             problemas.append(f"el texto limpio todavía contiene {c['no_debe_contener_en_limpio']!r}")
+
+        # `texto_limpio` es la versión normalizada, la que ven las reglas.
+        # Estas dos miran el texto que de verdad se le manda al paso siguiente:
+        # con mayúsculas y tildes, y sin los bloques institucionales. Son
+        # comprobaciones distintas y las dos hacen falta — un banner puede estar
+        # bien quitado para comparar y seguir viajando en el texto de salida.
+        if "debe_contener_en_envio" in c or "no_debe_contener_en_envio" in c:
+            envio, _ = engine.banners.limpiar_texto(
+                c["texto"], normalizar_contexto(c.get("contexto")))
+            if ("debe_contener_en_envio" in c
+                    and c["debe_contener_en_envio"] not in envio):
+                problemas.append(
+                    f"el texto de envío no contiene {c['debe_contener_en_envio']!r}")
+            if ("no_debe_contener_en_envio" in c
+                    and c["no_debe_contener_en_envio"] in envio):
+                problemas.append(
+                    f"el texto de envío todavía contiene {c['no_debe_contener_en_envio']!r}")
+
         if r["alerta_limpieza"]:
             problemas.append("la limpieza dejó el mensaje casi vacío")
 

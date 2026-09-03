@@ -8,36 +8,73 @@ El motor no sabe nada del dominio. Todo el criterio vive en los catálogos.
 
 ---
 
-## Estado: v0
+## Estado: v1
 
-Esto es el prototipo funcionando, con la higiene mínima para vivir en un repo.
-**No es todavía la versión descrita en el documento de hallazgos.** Lo que falta
-está en [PENDIENTES.md](PENDIENTES.md), medido y priorizado.
-
-Lo que v0 sí hace:
+Validado contra dos bases reales de producción y corregido con validación
+humana regla por regla. **El criterio del catálogo lo fija la lingüista, no el
+código.**
 
 | | |
 |---|---|
-| Reglas del catálogo | 141, en `catalogos/exclusiones.csv` |
-| Condiciones implementadas | Frase contenida, Solo aislado, Remitente / dominio |
-| Límites de palabra | sí, todo término se compila con `\b` |
+| Reglas del catálogo | 105, en `catalogos/exclusiones.csv`, 17 categorías |
+| Condiciones implementadas | Frase contenida (92), Solo aislado (11), Remitente / dominio (2) |
+| Bloques institucionales | 7, en `catalogos/banners.yaml` |
+| Prioridad entre categorías | sí, declarada en `catalogos/prioridades.csv` |
+| Deduplicación del historial citado | sí, `motor/deduplicacion.py` |
+| Lematización | sí, spaCy `es_core_news_lg`, **opcional** (`motor/lemas.py`) |
+| Límites de palabra | sí, todo término se compila con `` |
 | Limpieza de bloques | sí, cabecera y pie tratados distinto, con prueba de seguridad |
 | Alcance por regla | sí, columna `Alcance` consumida por el motor |
 | Devuelve evidencia | sí, siempre: regla, condición, texto que disparó |
 | Registra solapamientos | sí, columna `Perdedores` |
-| Suite de regresión | 13 casos, 3 marcados como hueco conocido |
+| Suite de regresión | 23 casos de catálogo + 12 de pipeline, 3 huecos conocidos |
 | Auditoría del catálogo | `scripts/auditar_catalogo.py` |
 
-Lo que v0 **no** hace, y hay que saberlo antes de creerle un número:
+Medido sobre dos bases reales, con el catálogo validado a mano:
 
-- **No deduplica el historial citado.** Es el arreglo de mayor retorno (~15,6%
-  del ahorro de tokens) y no está implementado.
-- **No usa lematización.** Matchea superficie. Las reglas del catálogo escritas
-  en infinitivo (`estar ausente`, `encontrar de vacaciones`) no disparan sobre
-  las formas conjugadas reales. La auditoría las lista.
-- **No decide por especificidad.** Recoge todos los matches y se queda con el
-  primero según el orden de condición, no con el más específico.
+| | base A | base B |
+|---|---|---|
+| correos | 80.340 | 12.078 |
+| exclusiones | 631 | 407 |
+| banners removidos | 84.534 | 8.149 |
+| **ahorro de texto** | **59,3 %** | **49,2 %** |
+
+Lo que **no** hace, y hay que saberlo antes de creerle un número:
+
+- **No decide por especificidad.** Recoge todos los matches y desempata por
+  condición, luego por la prioridad declarada de la categoría, luego por ID. Un
+  match más específico no gana por ser más específico.
 - **No implementa `Sin petición`.**
+- **`No-reply` describe el mecanismo, no el contenido**, y por eso se solapa con
+  todas las demás categorías. La prioridad lo mitiga —queda de último recurso—
+  pero el catálogo sigue mezclando dos dimensiones. Ver `PENDIENTES.md`.
+- **Sin el modelo de spaCy el motor funciona igual**, comparando superficie: las
+  reglas escritas en infinitivo no disparan sobre las formas conjugadas. No se
+  cae ni avisa distinto, sólo marca menos.
+
+---
+
+## Las dos ramas, y por qué son cuatro archivos
+
+El flujo del OTBB se bifurca después del motor, y cada rama necesita algo
+distinto del **mismo** procesamiento:
+
+- el **maestro** quiere las exclusiones fuera, para no pagar tokens por ellas
+- el **conversacional** las quiere adentro, porque un «gracias» al final dice
+  cómo se cerró la conversación
+
+Por eso **el motor nunca reemplaza el texto por la etiqueta**: devuelve el texto
+y la marca por separado, y cada rama toma lo que necesita. Si el motor
+sobreescribiera el cuerpo, la rama conversacional perdería el dato.
+
+`scripts/salidas_otbb.py` produce las cuatro salidas de una sola corrida:
+
+| archivo | para qué |
+|---|---|
+| `_maestro.csv` | lo que SÍ se analiza, sin exclusiones ni filas repetidas |
+| `_conversacional.csv` | todas las filas en orden de hilo y turno, con texto limpio y la marca al lado |
+| `_excluidos.csv` | qué se excluyó y por qué: hilo, turno, categoría, regla, evidencia |
+| `_exclusiones_data_maestro.csv` | lo mismo agregado, en el formato exacto de la hoja `Data_maestro` |
 
 ---
 
@@ -45,21 +82,40 @@ Lo que v0 **no** hace, y hay que saberlo antes de creerle un número:
 
 ```bash
 pip install -r requirements.txt
+python -m spacy download es_core_news_lg
 ```
+
+El modelo **no** se instala con el `requirements.txt`: pesa ~600 MB. Tiene que
+ser el grande. Medido con la suite de regresión, `es_core_news_sm` falla dos
+casos —y son los de fuera de oficina: el modelo chico no reconoce «Estaré» ni
+«Estaremos» como formas de «estar». Se elige con `MODELO_SPACY`.
+
+Sin el modelo el motor arranca igual y marca menos. `GET /health` dice cuál está
+cargado.
 
 ## Uso
 
 ```bash
-# procesar una base
-python scripts/procesar_exclusiones.py ruta/a/base.xlsx --contexto santander,cl
+# las cuatro salidas del OTBB, de una corrida
+python scripts/salidas_otbb.py ruta/a/base.csv --contexto cliente,cl
+
+# mandar una base al servicio en vez de procesarla acá
+python scripts/cliente_api.py ruta/a/base.csv --url https://... --key-file clave.txt
 
 # probar textos a mano
-python scripts/probar_exclusiones.py --contexto santander,cl
+python scripts/probar_exclusiones.py --contexto cliente,cl
+
+# buscar huecos del catálogo con evidencia, sin decidir nada
+python scripts/huecos_catalogo.py salida_conversacional.csv
 
 # antes de cualquier commit que toque el catálogo
 python scripts/auditar_catalogo.py
 python tests/test_regresion.py
+python tests/test_pipeline.py
 ```
+
+**La clave de la API nunca va como argumento**: queda en el historial del shell.
+Se pasa con `--key-file` o por la variable `API_KEY`.
 
 Ninguna ruta de cliente vive dentro de los scripts. La base se pasa por
 argumento; el catálogo se resuelve por `--catalogo`, por la variable de entorno
@@ -106,6 +162,31 @@ Dos decisiones del despliegue que no son negociables:
 2. **La recarga corre la suite antes de aceptar.** Si el catálogo nuevo no pasa,
    devuelve 400 y sigue activo el anterior. Autoservicio sin ese test es cómo una
    regla mala llega a producción en silencio.
+
+### Variables de entorno
+
+| variable | para qué | si falta |
+|---|---|---|
+| `CATALOGO_EXCLUSIONES` | ruta del CSV de reglas | usa el del repo |
+| `BANNERS_EXCLUSIONES` | ruta del YAML de bloques | usa el del repo |
+| `PRIORIDADES_EXCLUSIONES` | ruta del CSV de prioridades | **todas las categorías empatan** y desempata el ID |
+| `MODELO_SPACY` | qué modelo cargar | prueba `lg` y cae a `sm` |
+| `SIN_LEMAS` | apaga la lematización, para medir A/B | queda encendida |
+| `API_KEY_FILE` | archivo con la clave (secret montado) | se lee `API_KEY` |
+| `API_KEY` | la clave, si no hay archivo | el servicio queda **sin autenticación** |
+| `MAX_MENSAJES_POR_LOTE` | tope por llamada | 5000 |
+| `PORT` | puerto de escucha | 8000 |
+
+### Lo que hay que saber antes de desplegarlo en un PaaS
+
+- **La imagen pesa ~1,7 GB y el proceso usa ~900 MB de RAM**, casi todo el
+  modelo de spaCy (~600 MB). Un plan de 512 MB no lo levanta.
+- **Un hilo no se puede partir entre dos llamadas.** La deduplicación del
+  historial y la insistencia se calculan comparando mensajes del mismo hilo: si
+  la mitad quedó en otro lote, no hay contra qué comparar. Al armar los lotes se
+  corta entre hilos, nunca dentro de uno.
+- **El catálogo va montado, no dentro de la imagen.** Si queda adentro, cambiar
+  una regla pasa a ser un despliegue.
 
 ---
 
@@ -158,6 +239,30 @@ que era información perdida. Por eso hay una prueba de seguridad: si un mensaje
 tenía más de 90 caracteres y tras limpiar queda con menos de 30, se descarta la
 limpieza, se usa el crudo, y el proceso termina con error.
 
+### `catalogos/prioridades.csv`
+
+Cuando dos reglas de categorías distintas matchean el mismo mensaje, gana la de
+**número más bajo**. Vive en un archivo aparte y no como una columna del
+catálogo porque es una decisión **por categoría**, no por regla: declararla 105
+veces invita a que dos filas de la misma categoría queden con prioridades
+distintas.
+
+```
+10  Rebote / fallo de entrega     el servidor dice que no llegó: es un hecho, no una lectura
+20  Fuera de oficina / OOO        dice QUÉ pasa; además es un auto-reply, y tiene que ganarle
+30  Confirmación / OKG
+40  Evento de calendario
+50  Marketing / promo
+90  Notificación                  genérica: cede ante cualquier categoría más precisa
+99  No-reply                      describe el MECANISMO, no el contenido. Último recurso
+```
+
+Una categoría que no está en el archivo queda en 60: cede ante las declaradas
+por encima, pero no se va al fondo en silencio. **Si el archivo no está, todas
+empatan y el desempate vuelve a ser el ID** — el motor no se cae, sólo pierde la
+precedencia. Por eso el despliegue tiene que apuntarle con
+`PRIORIDADES_EXCLUSIONES`.
+
 ---
 
 ## Alcance: cómo se agrega un cliente
@@ -171,8 +276,8 @@ motor. Cada regla declara dónde aplica:
 - `cl,mx` — varios, separados por coma
 
 El motor recibe el contexto desde afuera (`--contexto`) y activa solo lo que
-calza. En v0 **todas las reglas están en `todos`**, para que el comportamiento
-sea idéntico al del prototipo. Marcar las que son locales es trabajo de
+calza. Hoy **todas las reglas están en `todos`**: no hay ninguna regla específica de un
+cliente, y esa es la intención —el motor sirve a cualquier cliente con correos. Marcar las que son locales es trabajo de
 catálogo: la auditoría lista las candidatas.
 
 ---
@@ -207,7 +312,20 @@ Tratamiento         qué hacer con el mensaje
 Perdedores          las otras reglas que también matchearon
 Bloques_removidos   qué banners se limpiaron
 Alerta_limpieza     True si la limpieza dejó el mensaje casi vacío
+Origen              quién lo generó: sistema, proveedor, persona
+Definicion          la definición de la regla, tal como está en el catálogo
+Via                 con qué comparación se encontró: superficie | lema
+Continua            si el mensaje marcado espera algo más de la conversación
+Motivo_continuidad  por qué
 ```
+
+`Via` existe para poder medir la lematización sin adivinar: dice si la regla
+disparó comparando el texto tal cual o su lema. Corriendo con `SIN_LEMAS=1` se
+obtiene el A/B contra la misma base.
+
+`Continua` es lo que permite que un «gracias» aislado se **marque sin
+excluirse**: la rama conversacional necesita ver cómo se cerró el hilo. Coincide
+con el criterio humano en el 95 % de los casos medidos.
 
 Y cuando la base trae hilos (`--hilo`, `--orden`, `--msgid`), además:
 

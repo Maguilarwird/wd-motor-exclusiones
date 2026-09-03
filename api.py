@@ -25,11 +25,23 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from motor import lemas
 from motor.exclusion_engine import ErrorCatalogo, ExclusionEngine, load_catalog
 from motor.pipeline import procesar
 from motor.validacion import correr_suite
 
-API_KEY = os.environ.get("API_KEY", "")
+def _leer_api_key():
+    ruta = os.environ.get("API_KEY_FILE")
+    if ruta:
+        try:
+            with open(ruta, encoding="utf-8") as fh:
+                return fh.read().strip()
+        except OSError as exc:
+            raise RuntimeError(f"no se pudo leer API_KEY_FILE={ruta}: {exc}") from exc
+    return os.environ.get("API_KEY", "")
+
+
+API_KEY = _leer_api_key()
 MAX_MENSAJES = int(os.environ.get("MAX_MENSAJES_POR_LOTE", "5000"))
 
 app = FastAPI(
@@ -53,6 +65,16 @@ def _cargar():
         "ruta": os.environ.get("CATALOGO_EXCLUSIONES", "(default del repo)"),
     })
     return engine
+
+
+def _publicar_engine(engine):
+    """Publica exactamente el motor que ya fue validado."""
+    _estado.update({
+        "engine": engine,
+        "reglas": len(engine.rules),
+        "cargado": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "ruta": os.environ.get("CATALOGO_EXCLUSIONES", "(default del repo)"),
+    })
 
 
 def _engine():
@@ -121,6 +143,11 @@ def health():
         "catalogo": _estado["ruta"],
         "cargado_en": _estado["cargado"],
         "version": app.version,
+        # Si el modelo lingüístico está o no cambia lo que el motor encuentra:
+        # sin él, las reglas escritas en infinitivo no disparan. No es un fallo
+        # —el servicio funciona igual— pero tiene que poder verse sin entrar al
+        # contenedor a adivinar.
+        "lematizacion": lemas.info(),
     }
 
 
@@ -185,6 +212,6 @@ def recargar_catalogo(x_api_key: Optional[str] = Header(None)):
             "suite": suite,
         })
     with _lock:
-        _cargar()
+        _publicar_engine(nuevo)
     return {"ok": True, "reglas_cargadas": _estado["reglas"],
             "cargado_en": _estado["cargado"], "suite": suite}

@@ -14,12 +14,20 @@ uvicorn[standard]>=0.27
 pydantic>=2.6
 
 # ─────────────────────────────────────────────────────────────
-# spaCy TODAVÍA NO es dependencia: el motor v0 matchea sobre superficie,
-# no sobre lemas. Cuando se implemente el match tolerante (ver PENDIENTES.md,
-# hueco 3) se agrega:
+# Lematización: OPCIONAL. Sin esto el motor funciona igual, comparando
+# superficie, y las reglas escritas en infinitivo no disparan (ver motor/lemas.py
+# y los huecos de tests/casos_regresion.yaml).
+spacy==3.8.16
+
+# El modelo NO se instala con pip install -r: hay que bajarlo aparte.
 #
-#     spacy==3.8.15
-#     python -m spacy download es_core_news_sm
+#     python -m spacy download es_core_news_lg
 #
-# con el nombre del modelo en la variable de entorno MODELO_SPACY.
+# Tiene que ser el GRANDE. Medido con la suite de regresión:
+#   es_core_news_lg   los 5 casos de lematización pasan
+#   es_core_news_sm   fallan 2, y son los de fuera de oficina — el modelo chico
+#                     no reconoce «Estaré» ni «Estaremos» como formas de «estar»
+#
+# Pesa ~560 MB contra ~15 MB del chico. Se elige con MODELO_SPACY; sin esa
+# variable se prueba lg y se cae a sm.
 # ─────────────────────────────────────────────────────────────

@@ -1,0 +1,18 @@
+Prioridad,Categoría,Por qué
+10,Rebote / fallo de entrega,El servidor dice que el correo no llegó. Es un hecho verificable y no lo escribió nadie: gana sobre cualquier lectura del contenido.
+20,Fuera de oficina / OOO,"Dice QUÉ pasa: alguien está ausente. Un aviso de ausencia es además una respuesta automática, así que matchea No-reply al mismo tiempo; tiene que ganar la que dice el contenido."
+20,Contacto ya no disponible,Igual que la anterior: dice qué pasó con la persona.
+20,Cambio de dato de contacto,Dice qué cambió.
+30,Confirmación / OKG,Contenido del cliente o del ejecutivo.
+30,Acuso de lectura,Confirmación automática de lectura.
+40,Evento de calendario,
+40,"Evento de calendario (teams, google meet, zoom)",
+40,Evento social interno,
+50,Marketing / promo,
+50,Marketing / fidelización,
+50,Marketing / phishing genérico,
+50,Encuesta (proveedor),
+50,Proveedor / tercero,
+50,Comunicación masiva (interna),
+90,Notificación,"Genérica: cabe casi cualquier aviso del sistema. Cede ante cualquier categoría que diga algo más preciso."
+99,No-reply,"Describe el MECANISMO —lo generó una máquina— no el contenido. Se solapa con todas las demás: todo auto-reply es un no-reply. Es el último recurso, sólo aplica si ninguna categoría de contenido matcheó."

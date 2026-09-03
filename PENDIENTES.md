@@ -3,62 +3,58 @@
 Lo que falta, lo que falla a propósito y lo que hay que devolverle a otro. Está
 acá para que no se absorba en silencio ni se "arregle" sobreajustando.
 
-Última revisión: 2026-08-26.
+Última revisión: 2026-09-03.
+
+---
+
+## Bloqueado en otra persona
+
+### Los códigos de tipificación `WMC###`
+
+`catalogos/tipificaciones.csv` mapea (Categoría, Origen) → código WMC. Hay **6
+mapeados y 9 sin código**. Sin ellos la columna `Tipificación` del
+`_exclusiones_data_maestro.csv` sale vacía y la fila no se puede pegar en la
+planilla. **No inventarlos.**
+
+### Decisiones de catálogo medidas y sin aplicar
+
+Medidas sobre una base de 80.340 correos, esperando decisión de catálogo:
+
+| candidato | volumen | qué es |
+|---|---|---|
+| tag `[EXT]` | 65.110 correos (81 %) | etiqueta de transporte, candidata a cabecera |
+| correos que quedan vacíos | ~2.227 | tras quitar banner y tag no queda texto, y van al maestro como válidos |
+| `Obtener Outlook para Android/iOS` | 2.042 | candidata a pie |
+| banner con encoding roto | 334 | el patrón no matchea porque el texto trae `rep??rtalo` |
 
 ---
 
 ## Huecos del motor, en orden de retorno
 
-### 1. Deduplicación del historial citado — no implementada
+### 1. Decisión por especificidad — no implementada
 
-**Es el arreglo que más rinde: ~15,6% del ahorro de tokens.** Del segundo
-mensaje de un hilo en adelante, entre el 40% y el 66% de cada correo es texto
-que la generativa ya leyó.
+El motor recoge todos los matches y desempata por condición, luego por la
+**prioridad declarada de la categoría** (`catalogos/prioridades.csv`), luego por
+ID. Lo que no hace es preferir **la regla más específica**, la que exige más
+términos.
 
-Qué hay que hacer: ensamblar el hilo en orden cronológico y eliminar de cada
-mensaje todo tramo de 60+ caracteres ya presente en un mensaje anterior del
-mismo hilo.
+La prioridad tapa el caso que más dolía —que `No-reply` le ganara a una
+categoría de contenido— pero no es lo mismo. Falta también un estado `dudoso`
+para los empates entre categorías distintas. La columna `Perdedores` ya deja los
+solapamientos visibles.
 
-No depende del catálogo, ni de un modelo lingüístico, ni de las cabeceras del
-correo. Es puramente mecánico.
+**Medido:** activar la prioridad cambia 1 etiqueta en 78.920 mensajes. El
+problema es real pero hoy es chico; crece a medida que crece el catálogo.
 
-Requiere que el motor trabaje **por hilo**, no por mensaje suelto. Hoy trabaja
-por mensaje.
+### 2. `No-reply` mezcla dos dimensiones
 
-### 2. Decisión por especificidad — no implementada
+`No-reply` describe el **mecanismo** —lo generó una máquina—, no el contenido.
+Por eso se solapa con todas las demás categorías: todo auto-reply es un
+no-reply. La prioridad 99 lo deja de último recurso y eso alcanza por ahora,
+pero la solución de verdad es separar mecanismo de contenido en dos columnas.
+`Institucional` tiene el mismo problema.
 
-El motor recoge todos los matches y se queda con el primero según el orden de
-condición. Debería ganar **la regla más específica**, la que exige más términos,
-y las perdedoras quedar registradas.
-
-La columna `Perdedores` ya existe y ya se llena, así que los solapamientos son
-visibles. Lo que falta es que el ganador se elija por especificidad y que haya
-un estado `dudoso` para los empates entre categorías distintas.
-
-### 3. Match tolerante — no implementado. Es el que explica los falsos negativos
-
-El motor matchea **superficie**. El catálogo está escrito en parte en **lemas**.
-Por eso hay reglas que no disparan nunca:
-
-| Regla del catálogo | No alcanza |
-|---|---|
-| `estar ausente` | «estaré ausente», «estoy ausente» |
-| `encontrar de vacaciones` | «me encuentro de vacaciones» |
-| `fuera de oficina` | «fuera de **la** oficina» |
-
-Tres tolerancias, cada una para una causa distinta de falla:
-
-- **Dos pistas:** buscar sobre el flujo de lemas *y* sobre la superficie sin
-  tildes, porque el lematizador inventa lemas (`estare` → `estarar`).
-- **Palabras vacías opcionales** entre los términos, para el caso del artículo.
-- **Terminación flexible** en verbos escritos en infinitivo, hasta 3 letras.
-
-Esto sí requiere spaCy, como preprocesador lingüístico y nunca como
-clasificador. Con el nombre del modelo en la variable `MODELO_SPACY`.
-
-`scripts/auditar_catalogo.py` lista hoy las reglas afectadas como avisos.
-
-### 4. Condición `Sin petición` — no implementada
+### 3. Condición `Sin petición` — no implementada
 
 La frase excluye solo si el mensaje no trae un pedido de negocio. Es lo que
 distingue un aviso de ausencia puro de uno que además pide algo.
@@ -66,12 +62,12 @@ distingue un aviso de ausencia puro de uno que además pide algo.
 Los verbos de redirección (`contactar`, `comunicar`) **no** cuentan como pedido:
 «favor contactar a mi back up» es parte de la plantilla de ausencia.
 
-**Consecuencia de orden:** las 15 reglas de OOO deben pasar de `Frase contenida`
-a `Sin petición` en la planilla, pero **no antes de que el motor implemente la
-condición**. Si se cambia primero la planilla, la auditoría falla — que es lo
-correcto — y las 15 reglas dejan de aplicarse como se espera.
+**Consecuencia de orden:** las reglas de OOO deben pasar de `Frase contenida` a
+`Sin petición` en la planilla, pero **no antes de que el motor implemente la
+condición**. Si se cambia primero la planilla, la auditoría falla —que es lo
+correcto— y esas reglas dejan de aplicarse como se espera.
 
-### 5. Capa 1 — no probada
+### 4. Capa 1 — no probada
 
 Separar lo que no es conversación con cliente: hilo de un solo mensaje +
 remitente con patrón de máquina + nunca respondido. Las tres condiciones juntas.
@@ -85,32 +81,73 @@ valiosos que puede entregar un OTBB.
 
 ---
 
+## Cerrados, para que no se reabran
+
+- **Deduplicación del historial citado** — implementada en
+  `motor/deduplicacion.py` y usada por el pipeline. Era el hueco de mayor
+  retorno.
+- **Match tolerante / lematización** — implementada en `motor/lemas.py` con
+  spaCy `es_core_news_lg`, como preprocesador y nunca como clasificador. La
+  columna `Via` dice si cada match salió por superficie o por lema, y `SIN_LEMAS=1`
+  permite el A/B. Dos trampas quedaron resueltas y anotadas ahí: el lematizador
+  borra el tiempo verbal (por eso los verbos en pasado finito se marcan aparte) y
+  un lema de una sola palabra genera falsos positivos (por eso `MIN_PALABRAS`).
+
+---
+
 ## Huecos conocidos, a propósito
 
 Están en `tests/casos_regresion.yaml` marcados con `hueco_conocido: true`.
 **Fallan a propósito y no rompen la suite.** Si uno empieza a pasar, la suite
 avisa que hay que promoverlo, no dejar la marca puesta.
 
-- `fuera de la sucursal` no está cubierto. El catálogo dice `oficina`. Es una
-  decisión de catálogo. **No ampliar la regla para hacer pasar el caso.**
-- Los dos casos de match tolerante del hueco 3.
+Son 3 sobre 23 casos. Entre ellos, `fuera de la sucursal`: el catálogo dice
+`oficina`. Es una decisión de catálogo. **No ampliar la regla para hacer pasar
+el caso.**
 
 ---
 
 ## Defectos del catálogo, para revisión de catálogo
 
-- **Todas las reglas están en `Alcance: todos`.** Es deliberado: v0 no cambia el
-  comportamiento del prototipo. Hay que marcar las locales. La auditoría lista
-  las candidatas — entre ellas `Institucional (Caja Los Andes)`, que es
-  específica de Chile.
+De los 86 errores que marcó la validación humana sobre 406 exclusiones, **quedan
+53 sin corregir**. Los de mayor volumen ya se atacaron: la precisión pasó de
+67,8 % a 75,5 %.
+
+El criterio que salió de esa validación, y que conviene aplicar antes de agregar
+cualquier regla nueva:
+
+> **Las reglas que fallan son las de una palabra suelta y común con condición
+> `Frase contenida`. Las de frase específica o condición `Solo aislado`
+> aciertan.** La pregunta antes de agregar una regla es la condición, no la
+> frase.
+
+| regla | condición | acierto |
+|---|---|---|
+| `ok/gracias` | Solo aislado | 96 % |
+| `happy hour` | Frase contenida, específica | 100 % |
+| `evento/invitación` | Frase contenida, palabra suelta | 67 % |
+| `de vacaciones` | Frase contenida, palabra suelta | 21 % |
+| `estar con licencia` | Frase contenida, palabra suelta | 3 % |
+
+Dos señales que se repitieron y sirven para escribir reglas nuevas:
+
+- **Un aviso automático DERIVA o DA UNA FECHA; una persona contando algo, no.**
+  «vacaciones desde el 18/06 hasta el 29» y «vendrá a mi reemplazo Paola»
+  aciertan; «estuve de vacaciones y por eso dejé configurado» falla.
+- **Una frase que vive en el ASUNTO no sirve como regla: quien responde hereda
+  el asunto.** Medido: `respuesta automática` aparece 67 veces en el asunto y 4
+  en el cuerpo, nunca en los dos.
+
+Pendientes concretos:
+
+- **Todas las reglas están en `Alcance: todos`.** Es deliberado: el motor sirve a
+  cualquier cliente con correos y hoy no hay ninguna regla específica de uno.
 - **`Evento de calendario` y `Evento de calendario (teams, google meet, zoom)`**
-  son la misma cosa con dos etiquetas.
-- **`read` como `Frase contenida`** en Acuso de lectura es muy amplio y se
-  solapa con `your message was read`.
+  siguen siendo la misma cosa con dos etiquetas.
+- **`read` como `Frase contenida`** (EXC-0003) es muy amplio y se solapa con
+  `your message was read`.
 - **`encuentrar ooo hasta`** tiene un typo y, con límites de palabra, no dispara.
-- Reglas escritas en lema y reglas escritas en superficie **conviven en la misma
-  hoja** sin marca que las distinga. Mientras no exista el match tolerante, las
-  primeras no funcionan.
+- **Los IDs `EXC-0048` y `EXC-0049` están retirados y no se vuelven a usar.**
 
 ---
 

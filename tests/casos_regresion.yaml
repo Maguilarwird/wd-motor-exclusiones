@@ -74,20 +74,20 @@ casos:
   - nombre: OOO con articulo intermedio
     texto: "Me encuentro fuera de la oficina, retomare contacto el dia habil siguiente."
     esperado: "Fuera de oficina / OOO"
-    hueco_conocido: true
-    motivo: >
-      La regla del catálogo dice «fuera de oficina» y el motor exige los
-      términos contiguos. Se resuelve con palabras vacías opcionales entre
-      términos. PENDIENTES hueco 3.
+    # Era hueco conocido: la regla decia 'fuera de oficina' sin articulo y el
+    # texto dice 'fuera de LA oficina'. Se cerro el 2026-09-03 agregando
+    # EXC-0112 'fuera de la oficina', derivada de 21 de los 29 correos que
+    # Jo marco como mal categorizados.
 
-  - nombre: OOO conjugado, catalogo en infinitivo
+  - nombre: OOO conjugado sin acento
     texto: "Estare ausente el 08/06 y 09/06, favor contactar a mi back up."
     esperado: "Fuera de oficina / OOO"
     hueco_conocido: true
     motivo: >
-      La regla dice «estar ausente» (lema) y el motor matchea superficie.
-      Se resuelve con lematización o con terminación flexible en verbos.
-      PENDIENTES hueco 3.
+      Con lematizacion esta regla YA funciona cuando el acento esta puesto
+      (ver el caso siguiente). Sin acento no: el modelo no puede saber que
+      «estare» es un verbo y lo lematiza como «estarir». Se resuelve agregando
+      la forma de superficie al catalogo, no con mas modelo.
 
   - nombre: fuera de la sucursal
     texto: "Me encuentro fuera de la sucursal por el resto de la jornada."
@@ -96,3 +96,96 @@ casos:
     motivo: >
       El catálogo cubre «oficina», no «sucursal». Es una decisión de catálogo,
       no un bug del motor. No ampliar la regla para hacer pasar este caso.
+
+  # ── Banners: lo que se quita del texto que se ENVÍA ──────────────────
+  # `*_en_limpio` mira la versión normalizada, la que comparan las reglas.
+  # `*_en_envio` mira el texto que de verdad viaja al paso siguiente. Son
+  # cosas distintas: durante meses el banner se quitaba para comparar y
+  # seguía viajando igual, y ninguna prueba lo notaba.
+
+  - nombre: banner de remitente externo, sin cola
+    contexto: ["santander"]
+    texto: >-
+      ALERTA: Este mensaje proviene de un remitente EXTERNO – ten cuidado
+      especialmente con enlaces y archivos adjuntos. Si sospechas, repórtalo de
+      inmediato con el botón del pez o reenvíalo a phishing@gruposantander.com.
+      Buenos días, ¿me confirma el estado de mi solicitud?
+    esperado: null
+    no_debe_contener_en_envio: "phishing@gruposantander.com"
+    debe_contener_en_envio: "Buenos días"
+
+  - nombre: quitar el banner no destruye mayusculas ni tildes
+    contexto: ["santander"]
+    texto: >-
+      ALERTA: Este mensaje proviene de un remitente EXTERNO – ten cuidado
+      especialmente con enlaces y archivos adjuntos. Si sospechas, repórtalo de
+      inmediato con el botón del pez o reenvíalo a phishing@gruposantander.com.
+      Señora Muñoz, adjunto la simulación del crédito que me solicitó.
+    esperado: null
+    debe_contener_en_envio: "Señora Muñoz, adjunto la simulación del crédito"
+
+  - nombre: sin banner el texto de envio queda intacto
+    contexto: ["santander"]
+    texto: "Estimada, ¿podría enviarme el certificado de deuda? Gracias."
+    esperado: null
+    debe_contener_en_envio: "¿podría enviarme el certificado de deuda?"
+
+  # ── Lematizacion (spaCy). Ver motor/lemas.py ─────────────────────────
+  # El catalogo tiene reglas escritas en infinitivo que la comparacion por
+  # superficie no puede encontrar nunca. Estos casos fijan que ahora si, y que
+  # generalizar no abrio la puerta de mas.
+
+  - nombre: OOO conjugado con acento, por lema
+    texto: "Estaré ausente el 08/06 y 09/06, favor contactar a mi back up."
+    esperado: "Fuera de oficina / OOO"
+
+  - nombre: OOO en plural, por lema
+    texto: "Estaremos ausentes toda la semana por cierre de oficina."
+    esperado: "Fuera de oficina / OOO"
+
+  - nombre: ausencia por licencia con derivacion
+    texto: "Estoy con licencia medica esta semana, favor contactar a mi jefatura."
+    esperado: "Fuera de oficina / OOO"
+    hueco_conocido: true
+    motivo: >
+      Esto SI es un auto-reply: anuncia la ausencia y deriva. Se dejo de
+      detectar al quitar la regla «estar/encontrar con licencia», que sobre
+      80.340 correos acertaba 1 de 36. Se acepto la perdida: 35 clientes
+      recuperados a cambio de este caso. Para recuperarlo haria falta una regla
+      que exija la ausencia MAS la derivacion —«con licencia | contactar/
+      dirigir/back up»— en vez de la frase sola.
+
+  - nombre: automatico conjugado, por lema
+    texto: "Este correo fue generado de manera automatica, favor no responder."
+    esperado: "No-reply"
+
+  - nombre: lematizar no debe marcar un evento que no es del calendario
+    texto: >-
+      Hemos levantado la situacion, dado que le llega al cliente la carta nos
+      apoyas. En junio no habiamos tenido eventos. Por tu lado necesitamos que
+      revisen la apelacion del credito.
+    esperado: null
+
+  # ── "Licencia" no es ausencia del ejecutivo ──────────────────────────
+  # Habia una regla «estar/encontrar con licencia» en Fuera de oficina. Sobre
+  # una base de 80.340 correos marco 36, y 35 eran clientes explicando su propia
+  # licencia medica al mandar liquidaciones para evaluar un credito. En un buzon
+  # de creditos la licencia del cliente es el dato central, no una ausencia.
+  # La regla se quito. Estos dos casos fijan la distincion.
+  #
+  # Lo que separa un auto-reply de un cliente no es quien lo manda —los dos
+  # llegan como recibidos— sino que el auto-reply DERIVA a otra persona y el
+  # cliente ADJUNTA lo que le pidieron.
+
+  - nombre: cliente que menciona su licencia al mandar documentos
+    texto: >-
+      Le mando lo solicitado, pero estoy con licencia medica y le envio las
+      liquidaciones del periodo para que puedan evaluar el credito.
+    esperado: null
+
+  - nombre: ausencia real que deriva a otra persona
+    texto: >-
+      Estimados, les informo que estaré ausente desde el 16 de enero,
+      retomando mis actividades el 19. Durante este periodo cualquier consulta
+      pueden dirigirla a mi colega. Agradezco su comprension.
+    esperado: "Fuera de oficina / OOO"

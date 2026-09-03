@@ -1,0 +1,30 @@
+name: motor-exclusiones
+
+services:
+  motor-exclusiones:
+    image: motor-exclusiones:local
+    build:
+      context: .
+    container_name: motor-exclusiones
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8000:8000"
+    environment:
+      API_KEY_FILE: /run/secrets/api_key
+      CATALOGO_EXCLUSIONES: /catalogos/exclusiones.csv
+      BANNERS_EXCLUSIONES: /catalogos/banners.yaml
+      # Sin esto todas las categorías empatan y el desempate vuelve a ser el ID:
+      # el motor no se cae, sólo pierde la precedencia declarada, en silencio.
+      PRIORIDADES_EXCLUSIONES: /catalogos/prioridades.csv
+      MAX_MENSAJES_POR_LOTE: "5000"
+    secrets:
+      - api_key
+    volumes:
+      - type: bind
+        source: ${CATALOGOS_HOST_PATH:-C:/motor-exclusiones/catalogos}
+        target: /catalogos
+        read_only: true
+
+secrets:
+  api_key:
+    file: ${API_KEY_SECRET_PATH:-C:/motor-exclusiones/secrets/api_key.txt}

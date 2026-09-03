@@ -19,7 +19,12 @@ bloques:
     alcance: santander
     tipo: cabecera
     descripcion: Banner de seguridad para correo de remitente externo
-    patron: 'alerta:?\s*este mensaje proviene de un remitente.*?(reenvialo a\s*\S+|boton del pez\S*)\.?'
+    # El patrón tiene que llegar hasta el ÚLTIMO marcador, no hasta el primero.
+    # Escrito como "(pez|reenvialo)" a secas cortaba en "botón del pez" y dejaba
+    # colgando " o reenvíalo a phishing@...". No se notó durante meses porque el
+    # texto limpio sólo se usaba para comparar reglas; al empezar a mandarlo al
+    # paso siguiente, la cola quedó a la vista.
+    patron: 'alerta:?\s*este mensaje proviene de un remitente externo.*?(boton del pez|reenvialo a\s*\S+)(\s*o\s*(boton del pez|reenvialo a\s*\S+))?\.?'
 
   - id: BAN-0002
     alcance: santander
@@ -32,3 +37,46 @@ bloques:
     tipo: pie
     descripcion: Aviso normativo de garantia estatal de depositos (CMF)
     patron: 'informese sobre la garantia estatal de los depositos'
+
+  # ── Bloques GENÉRICOS: alcance 'todos' ──────────────────────────────
+  # Estos no nombran a ninguna persona ni institución: describen una
+  # estructura. Un patrón que dice «Osvaldo Alexis Ceballos Perez, Sucursal
+  # Bilbao» sirve para un cliente y para ninguno más — eso es un parche, no un
+  # catálogo. Uno que dice «Email: algo@algo» sirve para cualquier banco.
+
+  - id: BAN-0004
+    alcance: todos
+    tipo: pie
+    descripcion: Formula de cierre, y la firma que venga detras
+    # Medido sobre 12.078 correos: 'atentamente' aparece 1.729 veces y en el
+    # 100% de los casos queda 1 caracter despues. Nunca en medio de una frase:
+    # lo que viene antes es siempre cierre (le saluda, gran dia, se despide).
+    # Como es un pie corta hasta el final, asi que se lleva tambien la firma,
+    # que siempre viene despues del cierre.
+    patron: '(le\s+saluda\s+)?atentamente|cordiales\s+saludos|saludos\s+cordiales|\bslds\b'
+
+  - id: BAN-0005
+    alcance: todos
+    tipo: pie
+    descripcion: Bloque de firma, reconocido por el campo de contacto
+    # Se ancla en «Email: x@y» y NO en el telefono. Un patron de telefono
+    # matchea tambien a un cliente que escribe «mi telefono es 9 8765 4321»,
+    # que es contenido, no firma. «Email:» con dos puntos solo aparece en
+    # bloques de firma.
+    patron: '\bemail\s*:\s*\S+@'
+
+  - id: BAN-0006
+    alcance: todos
+    tipo: cabecera
+    descripcion: Emoticones y emoji
+    # 1,2% en Santander y 1,6% en Banco de Chile: no hay nada mas generico.
+    # Es cabecera y no pie: se borran donde esten y el mensaje se conserva.
+    patron: '[\U0001F300-\U0001FAFF☀-➿️]'
+
+  - id: BAN-0007
+    alcance: todos
+    tipo: pie
+    descripcion: Pie legal de confidencialidad
+    # Aparecia como exclusion de No-reply, y no es un correo: es un bloque
+    # legal pegado al final. Como pie se corta y el mensaje de arriba se salva.
+    patron: 'la informacion (transmitida|contenida)|este (mensaje|correo) (y sus archivos )?(es|son) confidencial|destinad[oa] (unica|solo)'
