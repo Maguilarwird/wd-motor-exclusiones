@@ -108,6 +108,10 @@ python scripts/probar_exclusiones.py --contexto cliente,cl
 # buscar huecos del catálogo con evidencia, sin decidir nada
 python scripts/huecos_catalogo.py salida_conversacional.csv
 
+# medir un catálogo candidato contra un set validado a mano
+python scripts/medir_catalogo.py base.xlsx --validado validado.xlsx \
+    --catalogo catalogos/exclusiones.csv --contexto cliente,cl
+
 # antes de cualquier commit que toque el catálogo
 python scripts/auditar_catalogo.py
 python tests/test_regresion.py
@@ -366,3 +370,20 @@ La auditoría falla cuando algo está **declarado y no consumido**. Existe porqu
 declarar no es implementar: en el proyecto de entidades un campo declarado y
 nunca leído generó 37 falsos positivos que se investigaron durante días como un
 problema de precisión del motor.
+
+Y si la regla que se toca es de criterio y no de sintaxis, hay un paso más:
+
+```bash
+python scripts/medir_catalogo.py base.xlsx --validado validado.xlsx
+```
+
+Corre el catálogo candidato contra un set validado a mano y dice **cuántos
+errores arregla, cuántos aciertos pierde y qué marcas nuevas aparecen**. Las
+tres cifras juntas, porque mirando sólo la primera una regla que arregla 20
+errores y pierde 30 aciertos parece una mejora.
+
+**El archivo de validación no está en el repo y no puede estar**: trae el texto
+real de los correos. Vive fuera y se pasa por `--validado`. Cómo se arma está en
+el encabezado del script. Sin él se puede seguir tocando el catálogo, pero a
+ciegas: la suite de regresión cubre 23 casos escritos a mano, no el
+comportamiento sobre miles de correos reales.
