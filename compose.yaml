@@ -8,7 +8,8 @@ services:
     container_name: motor-exclusiones
     restart: unless-stopped
     ports:
-      - "0.0.0.0:8000:8000"
+      # 8095, no 8000: otbb-service ya usa 8000 en local (ver otbb-service/README.md).
+      - "0.0.0.0:8095:8000"
     environment:
       API_KEY_FILE: /run/secrets/api_key
       CATALOGO_EXCLUSIONES: /catalogos/exclusiones.csv
@@ -16,6 +17,7 @@ services:
       # Sin esto todas las categorías empatan y el desempate vuelve a ser el ID:
       # el motor no se cae, sólo pierde la precedencia declarada, en silencio.
       PRIORIDADES_EXCLUSIONES: /catalogos/prioridades.csv
+      TIPIFICACIONES_EXCLUSIONES: /catalogos/tipificaciones.csv
       MAX_MENSAJES_POR_LOTE: "5000"
     secrets:
       - api_key

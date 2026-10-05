@@ -8,6 +8,7 @@ Rutas
     GET  /catalogo            qué reglas tiene cargadas ahora mismo
     POST /procesar            un mensaje
     POST /procesar-lote       un hilo o una base completa
+    POST /procesar-otbb       las cuatro salidas OTBB (JSON o ZIP)
     POST /validar-catalogo    corre la suite de regresión contra el catálogo en disco
     POST /recargar-catalogo   lo carga en memoria, solo si la suite pasa
 
@@ -22,12 +23,14 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from motor import lemas
 from motor.exclusion_engine import ErrorCatalogo, ExclusionEngine, load_catalog
 from motor.pipeline import procesar
+from motor.salidas import armar_salidas, salidas_a_json, salidas_a_zip
 from motor.validacion import correr_suite
 
 def _leer_api_key():
@@ -48,7 +51,7 @@ app = FastAPI(
     title="Motor de exclusiones OTBB",
     description="Capa determinista: limpia, deduplica el historial citado, "
                 "marca insistencias y aplica el catálogo de exclusiones.",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 _lock = threading.Lock()
@@ -104,6 +107,11 @@ class Lote(BaseModel):
     mensajes: List[Mensaje]
     contexto: List[str] = Field(default_factory=list,
                                 description='alcance, ej ["santander","cl"]')
+
+
+class LoteOtbb(Lote):
+    nombre_base: Optional[str] = Field(
+        None, description="prefijo de archivos cuando formato=zip (default: salida)")
 
 
 class Uno(BaseModel):
@@ -172,16 +180,60 @@ def procesar_uno(body: Uno, x_api_key: Optional[str] = Header(None)):
     return {"mensaje": r["mensajes"][0], "avisos": r["avisos"]}
 
 
+def _validar_lote(mensajes: List[Mensaje]):
+    if len(mensajes) > MAX_MENSAJES:
+        raise HTTPException(status_code=413, detail=(
+            f"{len(mensajes)} mensajes supera el máximo de {MAX_MENSAJES}. "
+            "Partir en lotes por hilo: un hilo nunca debe quedar partido entre dos "
+            "llamadas, porque la deduplicación necesita los mensajes anteriores."))
+
+
 @app.post("/procesar-lote")
 def procesar_lote(body: Lote, x_api_key: Optional[str] = Header(None)):
     _autorizar(x_api_key)
-    if len(body.mensajes) > MAX_MENSAJES:
-        raise HTTPException(status_code=413, detail=(
-            f"{len(body.mensajes)} mensajes supera el máximo de {MAX_MENSAJES}. "
-            "Partir en lotes por hilo: un hilo nunca debe quedar partido entre dos "
-            "llamadas, porque la deduplicación necesita los mensajes anteriores."))
+    _validar_lote(body.mensajes)
     return procesar([m.model_dump() for m in body.mensajes],
                     contexto=body.contexto, engine=_engine())
+
+
+@app.post("/procesar-otbb")
+def procesar_otbb(
+    body: LoteOtbb,
+    x_api_key: Optional[str] = Header(None),
+    formato: str = Query("json", pattern="^(json|zip)$",
+                         description="json: cuatro tablas en el cuerpo; zip: CSV empaquetados"),
+):
+    """
+    Procesa un lote y devuelve las cuatro salidas OTBB en una sola llamada:
+
+    maestro, conversacional, excluidos y exclusiones_data_maestro.
+
+    Mismo contrato de entrada que /procesar-lote. Un hilo no puede quedar partido
+    entre dos llamadas.
+    """
+    _autorizar(x_api_key)
+    _validar_lote(body.mensajes)
+    filas = [m.model_dump() for m in body.mensajes]
+    resultado = procesar(filas, contexto=body.contexto, engine=_engine())
+    salidas = armar_salidas(filas, resultado)
+
+    if salidas["resumen"].get("alertas_limpieza"):
+        raise HTTPException(status_code=422, detail={
+            "mensaje": "En uno o más mensajes la limpieza dejó el texto casi vacío. "
+                       "Hay un banner mal clasificado.",
+            "alertas_limpieza": salidas["resumen"]["alertas_limpieza"],
+            "avisos": salidas["avisos"],
+        })
+
+    if formato == "zip":
+        stem = (body.nombre_base or "salida").strip() or "salida"
+        buf = salidas_a_zip(salidas, stem=stem)
+        return StreamingResponse(
+            buf,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{stem}_otbb.zip"'},
+        )
+    return salidas_a_json(salidas)
 
 
 @app.post("/validar-catalogo")
